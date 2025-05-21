@@ -1,26 +1,27 @@
-# main.py
+from fastapi import FastAPI, BackgroundTasks
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+
 import requests
 from bs4 import BeautifulSoup
 import json
-import time
 import re
-from fastapi import FastAPI, BackgroundTasks
-from fastapi.responses import JSONResponse
 
-# ——— CORS uchun qo‘shimcha ———
-from fastapi.middleware.cors import CORSMiddleware
+# ⛳ Avval app ni yaratamiz
+app = FastAPI()
 
+# ✅ So‘ngra middleware qo‘shamiz
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],       # yoki ["http://127.0.0.1:5500"] kabi faqat ma’lum domen
+    allow_origins=["*"],  # yoki ["http://127.0.0.1:5500"] faqat frontend uchun
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=True,
 )
 
-app = FastAPI()
-url = 'https://rutube.ru/channel/58919717/'
+# 🔽 Qolgan kod shu yerda
 VIDEO_IDS_FILE = 'video_ids.json'
+url = 'https://rutube.ru/channel/58919717/'
 
 def duration_to_seconds(duration_str: str) -> int:
     parts = list(map(int, duration_str.split(':')))
@@ -72,20 +73,14 @@ def fetch_new_videos() -> list:
 
 @app.on_event("startup")
 def startup_event():
-    # Boshlang‘ich scraping — faylni yaratish uchun
     fetch_new_videos()
 
 @app.get("/videos")
 def get_all_videos():
-    """Hozirgacha topilgan barcha video IDlarni qaytaradi."""
     ids = load_video_ids()
     return JSONResponse(content={"videos": ids})
 
 @app.get("/videos/new")
 def get_new_videos(background_tasks: BackgroundTasks):
-    """
-    Yangi videolarni aniqlaydi, ro‘yxatga qo‘shadi va qaytaradi.
-    Front bu endpointni polling (masalan 10–60 sekundda bir marta) orqali chaqirishi mumkin.
-    """
     new = fetch_new_videos()
     return JSONResponse(content={"new_videos": new})
