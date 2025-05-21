@@ -7,6 +7,17 @@ import re
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.responses import JSONResponse
 
+# ——— CORS uchun qo‘shimcha ———
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:5500/rutube_project/index.html"],       # yoki ["http://127.0.0.1:5500"] kabi faqat ma’lum domen
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=True,
+)
+
 app = FastAPI()
 url = 'https://rutube.ru/channel/58919717/'
 VIDEO_IDS_FILE = 'video_ids.json'
