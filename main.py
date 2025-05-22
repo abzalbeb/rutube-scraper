@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
@@ -7,51 +7,24 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import re
-import threading
 
-# Config file for storing channel URL
+# Config
 def load_config():
     try:
         with open('config.json', 'r') as f:
             return json.load(f)
     except FileNotFoundError:
-        # default config
         default = {"channel_url": "https://rutube.ru/channel/58919717/"}
         with open('config.json', 'w') as f:
             json.dump(default, f)
         return default
 
-
 def save_config(config: dict):
     with open('config.json', 'w') as f:
         json.dump(config, f)
 
-# 🛠 App and middleware
-app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Constants
-def duration_to_seconds(duration_str: str) -> int:
-    parts = list(map(int, duration_str.split(':')))
-    if len(parts) == 2:
-        return parts[0]*60 + parts[1]
-    elif len(parts) == 3:
-        return parts[0]*3600 + parts[1]*60 + parts[2]
-    return 0
-
+# Video IDs
 VIDEO_IDS_FILE = 'video_ids.json'
-
-# Load initial config
-def get_channel_url():
-    return load_config().get('channel_url')
-
-# Video ID persistence
 
 def load_video_ids() -> list:
     try:
@@ -61,17 +34,32 @@ def load_video_ids() -> list:
     except FileNotFoundError:
         return []
 
-
 def save_video_ids(ids: list):
     with open(VIDEO_IDS_FILE, 'w') as f:
         json.dump(ids, f)
 
-# Fetch logic
+# Helpers
+def duration_to_seconds(duration_str: str) -> int:
+    parts = list(map(int, duration_str.split(':')))
+    if len(parts) == 2:
+        return parts[0]*60 + parts[1]
+    elif len(parts) == 3:
+        return parts[0]*3600 + parts[1]*60 + parts[2]
+    return 0
+
+def get_channel_url():
+    return load_config().get('channel_url')
+
+# 🧠 Core parsing
 def fetch_new_videos() -> list:
     existing = load_video_ids()
     url = get_channel_url()
-    resp = requests.get(url)
-    resp.raise_for_status()
+    try:
+        resp = requests.get(url)
+        resp.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch channel: {str(e)}")
+
     soup = BeautifulSoup(resp.text, 'html.parser')
     new = []
 
@@ -96,23 +84,28 @@ def fetch_new_videos() -> list:
     save_video_ids(existing)
     return new
 
-# Startup load
-@app.on_event("startup")
-def startup_event():
-    threading.Thread(target=fetch_new_videos).start()
+# App setup
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# API models
+# Models
 class ChannelUpdate(BaseModel):
     channel_url: HttpUrl
 
-# 👁️ Endpoints
+# API Endpoints
 @app.get("/videos")
 def get_all_videos():
     ids = load_video_ids()
     return JSONResponse(content={"videos": ids})
 
 @app.get("/videos/new")
-def get_new_videos(background_tasks: BackgroundTasks):
+def get_new_videos():
     new = fetch_new_videos()
     return JSONResponse(content={"new_videos": new})
 
@@ -125,9 +118,15 @@ def get_channel():
 def update_channel(update: ChannelUpdate):
     config = {"channel_url": str(update.channel_url)}
     save_config(config)
-    # Reset stored video IDs to avoid missing videos on new channel
     save_video_ids([])
-    return JSONResponse(content={"message": "Channel URL updated", "channel_url": config['channel_url']})
 
-# To run:
-# uvicorn main:app --reload
+    try:
+        new = fetch_new_videos()
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Kanal yangilandi, ammo videolarni olishda xatolik: {str(e)}"})
+
+    return JSONResponse(content={
+        "message": "Channel URL updated",
+        "channel_url": config['channel_url'],
+        "fetched_videos": new
+    })
