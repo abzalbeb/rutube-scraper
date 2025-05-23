@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
@@ -98,8 +98,15 @@ class ChannelUpdate(BaseModel):
 
 # API Endpoints
 @app.get("/videos")
-def get_all_videos():
-    ids = load_video_ids()
+def get_all_videos(proxy: bool = Query(False, description="If true, fetch latest videos from channel")):
+    if proxy:
+        try:
+            ids = fetch_all_valid_videos()
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"error": f"Fetch xatolik: {str(e)}"})
+    else:
+        ids = load_video_ids()
+
     return JSONResponse(content={"videos": ids})
 
 @app.get("/channel")
