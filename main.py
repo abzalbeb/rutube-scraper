@@ -50,7 +50,7 @@ def duration_to_seconds(duration_str: str) -> int:
 def get_channel_url():
     return load_config().get('channel_url')
 
-# 🧠 Core parsing
+# Core parsing
 def fetch_new_videos() -> list:
     existing = load_video_ids()
     url = get_channel_url()
@@ -104,11 +104,6 @@ def get_all_videos():
     ids = load_video_ids()
     return JSONResponse(content={"videos": ids})
 
-@app.get("/videos/new")
-def get_new_videos():
-    new = fetch_new_videos()
-    return JSONResponse(content={"new_videos": new})
-
 @app.get("/channel")
 def get_channel():
     config = load_config()
@@ -118,15 +113,17 @@ def get_channel():
 def update_channel(update: ChannelUpdate):
     config = {"channel_url": str(update.channel_url)}
     save_config(config)
-    save_video_ids([])
+    save_video_ids([])  # Clear previous
 
     try:
         new = fetch_new_videos()
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": f"Kanal yangilandi, ammo videolarni olishda xatolik: {str(e)}"})
+        return JSONResponse(status_code=500, content={
+            "error": f"Kanal yangilandi, ammo videolarni olishda xatolik: {str(e)}"
+        })
 
     return JSONResponse(content={
         "message": "Channel URL updated",
         "channel_url": config['channel_url'],
-        "fetched_videos": new
+        "fetched_video_ids": [video["id"] for video in new]
     })
