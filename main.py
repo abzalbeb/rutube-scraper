@@ -50,18 +50,17 @@ def duration_to_seconds(duration_str: str) -> int:
 def get_channel_url():
     return load_config().get('channel_url')
 
-# Core parsing
-def fetch_new_videos() -> list:
-    existing = load_video_ids()
+# 🔁 Barcha yaroqli videolarni topish
+def fetch_all_valid_videos() -> list:
     url = get_channel_url()
     try:
         resp = requests.get(url)
         resp.raise_for_status()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch channel: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Kanal yuklanmadi: {str(e)}")
 
     soup = BeautifulSoup(resp.text, 'html.parser')
-    new = []
+    valid_ids = []
 
     for a in soup.find_all('a', href=True):
         if '/video/' not in a['href']:
@@ -77,12 +76,11 @@ def fetch_new_videos() -> list:
         if seconds > 90:
             continue
 
-        if vid not in existing:
-            existing.append(vid)
-            new.append({'id': vid, 'duration': duration_tag.strip()})
+        if vid not in valid_ids:
+            valid_ids.append(vid)
 
-    save_video_ids(existing)
-    return new
+    save_video_ids(valid_ids)
+    return valid_ids
 
 # App setup
 app = FastAPI()
@@ -113,10 +111,9 @@ def get_channel():
 def update_channel(update: ChannelUpdate):
     config = {"channel_url": str(update.channel_url)}
     save_config(config)
-    save_video_ids([])  # Clear previous
 
     try:
-        new = fetch_new_videos()
+        fetched_ids = fetch_all_valid_videos()
     except Exception as e:
         return JSONResponse(status_code=500, content={
             "error": f"Kanal yangilandi, ammo videolarni olishda xatolik: {str(e)}"
@@ -125,5 +122,5 @@ def update_channel(update: ChannelUpdate):
     return JSONResponse(content={
         "message": "Channel URL updated",
         "channel_url": config['channel_url'],
-        "fetched_video_ids": [video["id"] for video in new]
+        "fetched_video_ids": fetched_ids
     })
